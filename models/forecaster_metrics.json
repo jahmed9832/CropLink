@@ -1,0 +1,17 @@
+{
+  "data_source": "synthetic",
+  "horizons": {
+    "7": {
+      "mape_pct": 3.0,
+      "mape_naive_pct": 3.89,
+      "mae_bdt": 1.96,
+      "n_test": 4678
+    },
+    "14": {
+      "mape_pct": 3.67,
+      "mape_naive_pct": 6.11,
+      "mae_bdt": 2.39,
+      "n_test": 4678
+    }
+  }
+}

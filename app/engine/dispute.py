@@ -1,0 +1,52 @@
+"""Quality dispute evidence report. Kono party-ke automatically doshi bole na - human review lage."""
+from ..i18n import grade_name, t
+from .constants import GRADE_FACTOR
+
+
+def build_report(batch, order, observation, low_conf_threshold=0.6):
+    pre = {"grade": batch.get("grade"), "confidence": batch.get("grade_confidence"),
+           "weight_kg": batch.get("quantity_kg"), "agreed_price": order.get("agreed_price"),
+           "photo_recorded": bool(batch.get("photo_base64") or batch.get("photo_url")),
+           "recorded_at": batch.get("created_at")}
+    post = {"grade": observation.get("observed_grade"), "weight_kg": observation.get("observed_weight_kg"),
+            "proposed_deduction_pct": observation.get("proposed_deduction_pct", 0),
+            "reason": observation.get("reason", "")}
+    items = []   # code + params save hoy; lekha porar shomoy request-er bhashay toiri hoy
+    if pre["weight_kg"] and post["weight_kg"]:
+        diff = (post["weight_kg"] - pre["weight_kg"]) / pre["weight_kg"] * 100
+        if abs(diff) > 3:
+            items.append({"key": "disp.weight", "params": {"pct": f"{diff:+.1f}"}})
+    if pre["grade"] and post["grade"] and pre["grade"] != post["grade"]:
+        gdiff = (GRADE_FACTOR[post["grade"]] / GRADE_FACTOR[pre["grade"]] - 1) * 100
+        items.append({"key": "disp.grade", "params": {"pre": pre["grade"], "post": post["grade"], "diff": f"{gdiff:+.0f}"}})
+    if post["proposed_deduction_pct"] and post["proposed_deduction_pct"] > 0:
+        items.append({"key": "disp.deduction", "params": {"pct": post["proposed_deduction_pct"]}})
+    needs_review = bool(items)
+    note_items = []
+    if (pre["confidence"] or 1) < low_conf_threshold:
+        note_items.append({"key": "disp.lowconf", "params": {}})
+        needs_review = True
+    if not pre["photo_recorded"]:
+        note_items.append({"key": "disp.nophoto", "params": {}})
+        needs_review = True
+    if not post["reason"] and post["proposed_deduction_pct"]:
+        note_items.append({"key": "disp.noreason", "params": {}})
+    return render({"order_id": order["id"], "pre_sale": pre, "at_delivery": post, "items": items,
+                   "note_items": note_items, "needs_human_review": needs_review,
+                   "status": "open_for_review" if needs_review else "no_discrepancy"})
+
+
+def _text(item):
+    p = dict(item["params"])
+    if item["key"] == "disp.grade":
+        p["pre"], p["post"] = grade_name(p["pre"]), grade_name(p["post"])
+    return t(item["key"], **p)
+
+
+def render(report):
+    """Saved report theke ekhon-er bhashay discrepancies/notes/statement banay."""
+    r = dict(report)
+    r["discrepancies"] = [_text(i) for i in report.get("items", [])]
+    r["notes"] = [_text(i) for i in report.get("note_items", [])]
+    r["statement"] = t("disp.statement")
+    return r
