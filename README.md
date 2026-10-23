@@ -1,107 +1,116 @@
-# AgriSphere FairMarket - Backend (FastAPI + MongoDB)
+# AgriSphere FairMarket - Backend
 
-Ekta-i backend. Main engine = **`POST /decision/net-profit`** (sell now vs wait vs buyer offer, net income hishab).
+AI-powered fair-price market access and demand intelligence for smallholder farmers (Bangladesh first).
+One FastAPI service backed by MongoDB. The **decision engine** (`POST /decision/net-profit`) is the core:
+it compares selling now, waiting, and buyer offers by *estimated net income*, with a downside/base/best range.
 
-## Ki ki ache
-| Feature | Endpoint |
+- Live API docs: `<BASE_URL>/docs` (Swagger) - machine-readable spec: `<BASE_URL>/openapi.json`
+- For the frontend team: **`docs/API_GUIDE.md`** (screen-to-endpoint map, request/response examples, roles, languages)
+  and ready-made clients in `clients/flutter` and `clients/react`.
+
+## Features
+
+| Area | Endpoints |
 |---|---|
-| Net-profit decision engine (MAIN) | `POST /decision/net-profit` |
-| Register / Login (JWT, MongoDB users) | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
-| Voice Negotiation backend (min price + counter draft) | `POST /negotiation/counter-offer` |
-| Price alerts | `GET /alerts`, `GET /alerts/scan` |
-| Weather (optional) | `GET /weather` (OPENWEATHER_API_KEY lage) |
-| Price forecast (7/14 din, range soho) | `GET /forecast?crop=tomato&market=Dhaka` |
-| Photo grading A/B/C + confidence | `POST /grade` (multipart `file`) |
-| Batch + QR passport (hash) | `POST /batches`, `GET /batches/{id}/passport` |
-| Farmer lot / Buyer demand | `POST /lots`, `POST /demands` |
-| Buyer matching + fairness | `GET /lots/{id}/offers` |
-| Cooperative pooling | `POST /pool/plan`, `POST /orders` |
-| Quality dispute evidence | `POST /orders/{id}/delivery`, `GET /orders/{id}/evidence` |
-| Buyer reliability | `GET /buyers/{id}/reliability` |
-| Payment (SIMULATED escrow) | `POST /orders/{id}/payment` |
+| Auth (register/login, JWT, roles: farmer / buyer / admin) | `POST /auth/register`, `POST /auth/login`, `GET/PUT /auth/me` |
+| Net-profit decision engine | `POST /decision/net-profit` |
+| Price forecast (7/14 days, with range), history, today's prices | `GET /forecast`, `GET /prices/history`, `GET /prices/today` |
+| Photo grading A/B/C with confidence, batch + QR passport | `POST /grade`, `POST /batches/from-photo`, `GET /batches/{id}/passport` |
+| Harvest lots, buyer demands, matching with fairness indicator | `POST /lots`, `POST /demands`, `GET /lots/{id}/offers` |
+| Cooperative supply pooling | `POST /pool/plan`, `POST /orders` |
+| Negotiation: minimum price + counter-offer drafts (BN/EN) | `POST /negotiation/counter-offer` |
+| Quality dispute evidence | `POST /orders/{id}/delivery`, `GET /orders/{id}/evidence`, `POST /orders/{id}/dispute/resolve` (admin) |
+| Buyer reliability score ("limited history" for new buyers) | `GET /buyers/{id}/reliability` |
+| Simulated escrow payment | `POST /orders/{id}/payment` |
 | Loss prevention | `POST /loss/assess` |
-| Demand radar | `GET /demand-radar` |
-| Bangla assistant (price, sell/wait, loss, dor-koshakoshi) | `POST /assistant/chat` |
-| Voice negotiation backend: minimum price + counter-offer draft (BN/EN) | `POST /negotiation/counter-offer` |
-| Price-spike / forecast alerts | `GET /alerts/price`, `GET /alerts/scan`, `POST /alerts/watch`, `GET /alerts/farmer/{id}` |
-| Weather (OpenWeatherMap) | `GET /weather?district=Dhaka` (decision/loss/negotiation auto use kore) |
-| Daily price ingest | `POST /prices` |
+| Price alerts | `GET /alerts/price`, `GET /alerts/scan`, `POST /alerts/watch`, `GET /alerts/farmer/{id}` |
+| Demand radar (confirmed vs predicted) | `GET /demand-radar` |
+| Bangla/English text assistant (multi-turn, with suggestions) | `POST /assistant/chat` |
+| Weather (OpenWeatherMap, optional) | `GET /weather` |
+| Dashboards (farmer, buyer, admin) | `GET /dashboard/farmer/{id}`, `/dashboard/buyer/{id}`, `/dashboard/admin` |
 
-**Frontend/app team-er jonno full guide: `docs/API_GUIDE.md`; ready-made client: `clients/flutter`, `clients/react`** (screen -> API map, request/response example, Dart/JS code).
+## Languages (Bangla / English)
+Send `Accept-Language: bn` or `en` (or `?lang=en`) and every user-facing text in the response - decision explanations,
+alerts, assistant replies, errors, dispute reports - comes back in that language. Default is `bn`
+(set `DEFAULT_LANG=en` to change it). Dropdown labels (crops, markets, grades, statuses) are in `GET /meta`.
+See `docs/API_GUIDE.md`, section "Languages".
 
-Swagger docs (app dev-ra eta dekhe sob endpoint test korte parbe): `https://<your-app>.onrender.com/docs`
+## Environment variables
 
-## Deploy (Render + MongoDB Atlas) - step by step
-1. **MongoDB Atlas** (free): mongodb.com/atlas -> Create free M0 cluster -> Database Access-e user+password banan -> Network Access-e `0.0.0.0/0` allow -> Connect -> Drivers -> connection string copy (`mongodb+srv://...`). Password-er moddhe `@ : /` thakle URL-encode korte hobe.
-2. **GitHub**: ei folder-ta ekta new GitHub repo-te push/upload korun (zip khule sob file upload).
-3. **Render**: render.com -> New -> **Blueprint** (ba Web Service) -> repo select. `render.yaml` auto settings nibe.
-   - Web Service manually korle: Build `pip install -r requirements.txt && python -m app.ml.train_all`, Start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
-4. Render **Environment**-e set korun: `MONGODB_URI` = Atlas string, `MONGODB_DB` = agrisphere, (optional) `API_KEY` = ekta secret.
-5. Deploy hole `https://<name>.onrender.com/health` khulle `"database":"mongodb"` dekhabe. Eitai app-er **base URL**.
-6. App theke call: `X-API-Key: <API_KEY>` header (jodi API_KEY set koren).
+| Variable | Required | Purpose |
+|---|---|---|
+| `MONGODB_URI` | yes | MongoDB connection string (without it the app uses an in-memory database, for local demos only) |
+| `JWT_SECRET` | yes (production) | Secret used to sign login tokens. Use a long random string and never change it casually |
+| `PYTHON_VERSION` | Render | `3.12.3` |
+| `SEED_DEMO` | no | `true` creates demo accounts and sample data at startup. Set `false` in production |
+| `ADMIN_PHONE`, `ADMIN_PASSWORD` | no | Creates your own admin account |
+| `OPENWEATHER_API_KEY` | no | Enables real weather. Without it the engine uses the request's temperature or 30 C |
+| `DEFAULT_LANG` | no | `bn` (default) or `en` |
+| `API_KEY` | no | Leave empty. If set, every request needs an `X-API-Key` header |
+| `ALLOWED_ORIGINS` | no | CORS origins, default `*` |
 
-Note: Render free plan-e 15 min idle thakle sleep kore; prothom request-e ~30-50 sec lage. Demo-r age `/health` hit kore rakhun.
+Never commit real values of these variables. Set them in the Render dashboard (or your shell for local runs).
 
-## Model gulo
-- **Price forecaster** (HistGradientBoosting) - ekhon *synthetic* price diye train. Real DAM data dile: `data/dam_prices.csv` (columns: `date,crop,market,price`) rakhun, tarpor build/`python -m app.ml.train_all` chalan (`models/` folder muche dite hobe). Metrics: `models/forecaster_metrics.json` (naive baseline-er sathe compare kora).
-- **Photo grader** - ekhon *synthetic image* diye train (pipeline kaj kore ki na dekhar jonno). Real use-er jonno `data/images/A|B|C/*.jpg` e real photo rakhun, 150+ hole auto retrain-e real data use hobe. **Real accuracy claim korben na** jotokkhon real data-te evaluate na hoy.
-- Bangla assistant rule-based (kono paid API key lage na). Voice-er jonno app-e speech-to-text/text-to-speech (bn-BD) use kore text ei endpoint-e pathan.
-
-## Local-e chalano
+## Run locally
 ```
+python -m venv .venv
+.venv\Scripts\Activate.ps1          # Windows PowerShell   (macOS/Linux: source .venv/bin/activate)
 pip install -r requirements.txt
-python -m app.ml.train_all
-uvicorn app.main:app --reload     # MONGODB_URI na dile in-memory DB
-python tests/test_core.py
-python scripts/seed_demo.py http://127.0.0.1:8000
+python -m app.ml.train_all           # trains the forecasting and grading models
+$env:MONGODB_URI="mongodb+srv://USER:PASSWORD@cluster.mongodb.net/"   # optional
+$env:SEED_DEMO="true"
+uvicorn app.main:app --reload --reload-dir app
 ```
+Open `http://127.0.0.1:8000/docs`.
 
-## Proposal-er sathe mil / sima
-- Payment escrow **simulated** (bKash/Nagad merchant access chhara real kora jay na) - proposal-o eta-i bole.
-- Demand prediction model nai (data kom); radar confirmed demand ar oversupply risk dekhay, prediction "insufficient_data" label kore.
-- Route optimization nai (proposal-er stretch goal).
+## Deploy (GitHub + Render + MongoDB Atlas)
+1. **MongoDB Atlas:** create a free M0 cluster, add a database user, allow access from `0.0.0.0/0` (Network Access), copy the connection string and put your user/password in it.
+2. **GitHub:** push this folder to a private repository (do not upload `.venv`, `models`, `data`).
+3. **Render:** New > Web Service > select the repository.
+   - Build command: `pip install -r requirements.txt && python -m app.ml.train_all`
+   - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   - Instance type: Free, region: Singapore
+   - Environment variables: `MONGODB_URI`, `JWT_SECRET`, `PYTHON_VERSION=3.12.3`, `SEED_DEMO=true`
+4. Open `<URL>/health` - it must show `"database": "mongodb"`.
 
-## Login / Auth (MongoDB-te user thake)
-- `POST /auth/register` `{name, phone, password, role: "farmer"|"buyer", district}` -> `token` ferot dey (profile o auto toiri hoy, `user_id` = profile id).
-- `POST /auth/login` `{phone, password}` -> `token`.
-- Baki sob endpoint-e header lagbe: `Authorization: Bearer <token>`. Password hash kore (PBKDF2) save hoy, plain text noy.
-- Test korar somoy auth bondho rakhte chaile `AUTH_REQUIRED=false`.
-- `/docs` e register/login kore token copy -> upore **Authorize** button-e paste.
+The free Render plan sleeps after 15 minutes of inactivity; the first request afterwards takes 30-50 seconds.
 
-## IntelliJ-te run korar nijom
-1. Python 3.11/3.12 install (python.org). IntelliJ-e **Python plugin** (ba PyCharm Community) install.
-2. Zip extract -> IntelliJ: File > Open > `agrisphere-backend` folder.
-3. Bottom-er **Terminal** tab-e:
-   - Windows: `python -m venv .venv` then `.venv\Scripts\activate`
-   - Mac/Linux: `python3 -m venv .venv` then `source .venv/bin/activate`
-   - `pip install -r requirements.txt`
-   - `python -m app.ml.train_all`
-   - `uvicorn app.main:app --reload`
-4. Browser-e `http://127.0.0.1:8000/docs` kholen - ekhane sob API click kore test kora jay.
-5. `MONGODB_URI` na dile in-memory DB (restart-e data jabe). Atlas-e connect korte terminal-e age set korun:
-   Windows: `set MONGODB_URI=mongodb+srv://...`  Mac/Linux: `export MONGODB_URI="mongodb+srv://..."`
-
-## Backend test (ek command-e, 63ta check)
+## Test the whole backend with one command
 ```
-python scripts/live_check.py https://<your-app>.onrender.com     # Render
-python scripts/live_check.py http://127.0.0.1:8000               # PC-te local
+python scripts/live_check.py https://<your-app>.onrender.com      # deployed
+python scripts/live_check.py http://127.0.0.1:8000                # local
 ```
-Shob PASS hole backend thik. FAIL hole oi line-er niche hint thake. Demo account lagbe (`SEED_DEMO=true`).
+It runs about 70 checks (login and roles, decision engine in both languages, forecast, alerts, negotiation, assistant,
+photo grading, the full order flow with pooling, delivery, dispute and payment, dashboards) and prints PASS/FAIL with a
+hint for every failure. It needs the demo accounts (`SEED_DEMO=true`). Unit tests: `python tests/test_core.py`.
 
-## Bangla / English
-Request-e header `Accept-Language: bn` ba `en` (ba `?lang=en`) dile backend-er shob user-facing text (decision explanation, alert, assistant reply, error, dispute report...) oi bhashay ashe. Default `bn`; `DEFAULT_LANG=en` env diye bodlano jay. Dropdown/label-er naam `GET /meta`-te Bangla+English duitei ache. Details: `docs/API_GUIDE.md` section 23.
+## Demo accounts (when `SEED_DEMO=true`; password for all: `demo1234`)
+| Role | Phone |
+|---|---|
+| Farmer | `01700000001` (also `01700000011`, `01700000012`) |
+| Buyer | `01700000002` (also `01700000021`) |
+| Admin | `01700000003` |
 
-## Demo data + role (frontend team-er sohoj kajer jonno)
-- `SEED_DEMO=true` (Render Environment-e) dile startup-e demo account + sample lot/demand/order history toiri hoy. Password `demo1234`: farmer `01700000001`, buyer `01700000002`, admin `01700000003`. Production-e `SEED_DEMO=false`.
-- Admin nijer phone/password chaile `ADMIN_PHONE` + `ADMIN_PASSWORD` set korun.
-- Role: farmer/buyer nijer data-i change korte pare (onner id dile 403); admin dispute resolve, price ingest, dashboard.
-- Notun endpoint: `/batches/from-photo`, `/orders`, `/prices/history`, `/prices/today`, `/dashboard/*`, `PUT /auth/me`. Details `docs/API_GUIDE.md`.
+## Models and data - important limitations
+- The **price forecaster** and the **photo grader** are currently trained on **synthetic data**. Their reported metrics
+  (`models/*_metrics.json`) are not real-world accuracy; do not present them as such. To use real data, put DAM prices in
+  `data/dam_prices.csv` (`date,crop,market,price`) and labelled photos in `data/images/A|B|C/*.jpg`, delete `models/`, and re-run `python -m app.ml.train_all`.
+- Payments are **simulated**; real bKash/Nagad escrow needs merchant access.
+- Predicted demand needs at least 8 weeks of completed orders, otherwise it reports `insufficient_data`.
+- The assistant is rule-based (prices, sell-or-wait advice, spoilage risk, negotiation). It is not a general-purpose chatbot.
+- SMS/IVR and route optimization are not implemented.
 
-## Weather API key (optional, free)
-1. openweathermap.org -> Sign up -> profile menu > **My API keys** -> key copy (active hote 10 min - 2 ghonta lagte pare).
-2. **Render:** Environment-e `OPENWEATHER_API_KEY` = key. **Local (PowerShell):** `$env:OPENWEATHER_API_KEY="key"`.
-3. Check: `/weather?district=Dhaka` e `"available": true` asha chai. Key na thakle backend default 30C ba request-er `temperature_c` use kore, kono error hoy na.
-
-## Alerts / voice negotiation app-e kivabe
-- Push notification backend pathay na. App periodically `GET /alerts/farmer/{id}` call kore notification dekhabe.
-- Voice: app speech-to-text -> `/assistant/chat` ba `/negotiation/counter-offer` -> text uttor/ `draft_message_bn` -> text-to-speech. Draft farmer review kore pathabe.
+## Project layout
+```
+app/
+  main.py          API routes, auth, permissions, language middleware
+  i18n.py          Bangla/English message catalog
+  db.py            MongoDB layer (in-memory fallback)
+  seed.py          demo accounts and sample data
+  engine/          decision engine, matching, pooling, dispute, reliability, alerts, negotiation, assistant, loss, demand
+  ml/              price forecaster and photo grader (training + inference)
+clients/           Flutter and React API clients
+docs/API_GUIDE.md  frontend integration guide
+scripts/           live_check.py (end-to-end test)
+tests/             unit tests
+```
