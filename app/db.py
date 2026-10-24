@@ -121,8 +121,10 @@ class MongoDB:
 
     def __init__(self, uri, name):
         from motor.motor_asyncio import AsyncIOMotorClient
-        self.client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=8000)
-        self.db = self.client[name]
+        clean_uri = (uri or "").strip()
+        clean_name = (name or "agrisphere").strip()
+        self.client = AsyncIOMotorClient(clean_uri, serverSelectionTimeoutMS=8000)
+        self.db = self.client[clean_name]
 
     async def setup(self):
         for c in self.COLLECTIONS:
@@ -173,6 +175,8 @@ class MongoDB:
 
 
 def make_db():
-    if settings.MONGODB_URI:
-        return MongoDB(settings.MONGODB_URI, settings.MONGODB_DB)
+    uri = (settings.MONGODB_URI or "").strip()
+    db_name = (settings.MONGODB_DB or "agrisphere").strip()
+    if uri:
+        return MongoDB(uri, db_name)
     return MemoryDB()

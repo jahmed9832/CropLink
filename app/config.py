@@ -5,9 +5,9 @@ load_dotenv()
 
 
 class Settings:
-    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
-    MONGODB_URI: str = os.getenv("MONGODB_URI", "")
-    MONGODB_DB: str = os.getenv("MONGODB_DB", "agrisphere")
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development").strip()
+    MONGODB_URI: str = os.getenv("MONGODB_URI", "").strip()
+    MONGODB_DB: str = os.getenv("MONGODB_DB", "agrisphere").strip()
     API_KEY: str = os.getenv("API_KEY", "")
     JWT_SECRET: str = os.getenv("JWT_SECRET", "dev-only-change-me")
     AUTH_REQUIRED: bool = os.getenv("AUTH_REQUIRED", "true").lower() == "true"
