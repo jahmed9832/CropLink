@@ -26,8 +26,9 @@ export default function DashboardScreen({ onNavigate }) {
     try {
       // 1. Fetch Today's Market Prices
       const pricesRes = await api.getTodayPrices();
-      if (pricesRes && pricesRes.prices) {
-        setTodayPrices(pricesRes.prices.slice(0, 5));
+      if (pricesRes) {
+        const raw = Array.isArray(pricesRes) ? pricesRes : (pricesRes.prices || []);
+        setTodayPrices(raw.slice(0, 5));
       }
 
       // 2. Fetch Farmer Dashboard if farmer

@@ -1,0 +1,54 @@
+name: Build Android Release APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build CropLink APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: croplink-mobile/package-lock.json
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Mobile Dependencies
+        run: |
+          cd croplink-mobile
+          npm ci
+
+      - name: Prebuild Native Android Project
+        run: |
+          cd croplink-mobile
+          npx expo prebuild --platform android
+
+      - name: Build Android Release APK
+        run: |
+          cd croplink-mobile/android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CropLink-Release-APK
+          path: croplink-mobile/android/app/build/outputs/apk/release/*.apk
+          retention-days: 30

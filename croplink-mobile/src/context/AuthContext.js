@@ -20,6 +20,7 @@ export const AuthProvider = ({ children }) => {
       if (savedUser) {
         setUser(savedUser);
       }
+      setServerUrl(api.baseUrl);
       setLoading(false);
 
       // Trigger server wake-up check immediately
@@ -59,8 +60,10 @@ export const AuthProvider = ({ children }) => {
   const [serverUrl, setServerUrl] = useState(api.baseUrl);
 
   const switchServerUrl = async (newUrl) => {
+    setServerStatus('waking');
     await api.setServerUrl(newUrl);
     setServerUrl(api.baseUrl);
+    await api.wakeUpServer(setServerStatus);
   };
 
   const t = TRANSLATIONS[lang] || TRANSLATIONS.bn;

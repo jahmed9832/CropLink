@@ -9,6 +9,11 @@ const localIp = debuggerHost ? debuggerHost.split(':')[0] : '192.168.0.106';
 export const LOCAL_SERVER_URL = `http://${localIp}:8000`;
 export const RENDER_SERVER_URL = 'https://agrisphere-backend-sv5x.onrender.com';
 
+// In standalone APK build (where anyone installs it), default to Render cloud
+export const DEFAULT_SERVER_URL = (typeof __DEV__ !== 'undefined' && __DEV__ && debuggerHost)
+  ? LOCAL_SERVER_URL
+  : RENDER_SERVER_URL;
+
 const SERVER_URL_KEY = '@croplink_server_url';
 const TIMEOUT_MS = 65000;
 const TOKEN_KEY = '@croplink_token';
@@ -25,7 +30,7 @@ class ApiError extends Error {
 
 class AgriSphereApi {
   constructor() {
-    this.baseUrl = LOCAL_SERVER_URL;
+    this.baseUrl = DEFAULT_SERVER_URL;
     this.token = null;
     this.lang = 'bn';
     this.isServerAwake = false;
@@ -41,7 +46,11 @@ class AgriSphereApi {
       ]);
       if (savedToken) this.token = savedToken;
       if (savedLang) this.lang = savedLang;
-      if (savedUrl) this.baseUrl = savedUrl;
+      if (savedUrl) {
+        this.baseUrl = savedUrl;
+      } else {
+        this.baseUrl = DEFAULT_SERVER_URL;
+      }
     } catch (_) {}
 
     // Instant proactive wake-up call to backend in background

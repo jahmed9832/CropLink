@@ -32,8 +32,8 @@ export default function MarketPricesScreen() {
         api.getTodayPrices(selectedMarket),
         api.getForecast(selectedCrop, selectedMarket),
       ]);
-      if (todayRes && todayRes.prices) {
-        setTodayPrices(todayRes.prices);
+      if (todayRes) {
+        setTodayPrices(Array.isArray(todayRes) ? todayRes : (todayRes.prices || []));
       }
       setForecast(forecastRes);
     } catch (_) {

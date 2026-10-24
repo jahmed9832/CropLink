@@ -31,13 +31,16 @@ services:
       - key: DEFAULT_LANG
         value: bn
       - key: SEED_DEMO
-        value: "false"
+        value: "true"
+      - key: ALLOW_DEMO_SEED
+        value: "true"
+      - key: DEMO_PASSWORD
+        value: "demo1234"
       - key: ALLOW_SYNTHETIC_DATA
-        value: "false"
+        value: "true"
       - key: ADMIN_PHONE
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
       - key: ALLOWED_ORIGINS
-        # Set to specific front-end domain(s) in production, e.g., https://your-app.com
-        value: "https://your-frontend-domain.com"
+        value: "*"
