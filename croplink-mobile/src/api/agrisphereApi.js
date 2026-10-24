@@ -7,7 +7,7 @@ const debuggerHost = Constants.expoConfig?.hostUri || Constants.manifest2?.extra
 const localIp = debuggerHost ? debuggerHost.split(':')[0] : '192.168.0.106';
 
 export const LOCAL_SERVER_URL = `http://${localIp}:8000`;
-export const RENDER_SERVER_URL = 'https://agrisphere-backend-sv5x.onrender.com';
+export const RENDER_SERVER_URL = 'https://agrisphere-backend-vb4o.onrender.com';
 
 // In standalone APK build (where anyone installs it), default to Render cloud
 export const DEFAULT_SERVER_URL = (typeof __DEV__ !== 'undefined' && __DEV__ && debuggerHost)
