@@ -112,8 +112,25 @@ app/
   seed.py          demo accounts and sample data
   engine/          decision engine, matching, pooling, dispute, reliability, alerts, negotiation, assistant, loss, demand
   ml/              price forecaster and photo grader (training + inference)
-clients/           Flutter and React API clients
-docs/API_GUIDE.md  frontend integration guide
-scripts/           live_check.py (end-to-end test)
-tests/             unit tests
+croplink-web/      React + Vite 3D cinematic landing page (Three.js + GSAP + auth)
+croplink-mobile/   Expo / React Native mobile application for farmers and buyers
+clients/           Flutter and React API client SDKs
+docs/              API guide and open questions documentation
+scripts/           live_check.py (end-to-end verification) and seed scripts
+tests/             comprehensive pytest test suite (53 tests)
+```
+
+## Run the 3D Web Landing Page
+```bash
+cd croplink-web
+npm install
+npm run dev        # Starts Vite dev server at http://localhost:5173
+npm run build      # Produces optimized production bundle in dist/
+```
+
+## Run the Mobile App
+```bash
+cd croplink-mobile
+npm install
+npx expo start     # Starts Expo development server for iOS / Android / Web
 ```
