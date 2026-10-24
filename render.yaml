@@ -10,6 +10,8 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.3
+      - key: ENVIRONMENT
+        value: production
       - key: MONGODB_URI
         sync: false
       - key: MONGODB_DB
@@ -22,13 +24,20 @@ services:
         value: "true"
       - key: OPENWEATHER_API_KEY
         sync: false
-      - key: OPENWEATHER_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: DEFAULT_LANG
+        value: bn
       - key: SEED_DEMO
-        value: "true"
+        value: "false"
+      - key: ALLOW_SYNTHETIC_DATA
+        value: "false"
       - key: ADMIN_PHONE
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
       - key: ALLOWED_ORIGINS
-        value: "*"
+        # Set to specific front-end domain(s) in production, e.g., https://your-app.com
+        value: "https://your-frontend-domain.com"

@@ -27,27 +27,37 @@ GREETING = ["কেমন", "hello", "hi", "সালাম", "assalamu", "valo"
 BN_DIGITS = str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")
 
 
+def _matches_word(w: str, text: str) -> bool:
+    if re.search(r"[a-zA-Z]", w):
+        return bool(re.search(rf"\b{re.escape(w)}\b", text))
+    return w in text
+
+
+def _matches_any(words: list, text: str) -> bool:
+    return any(_matches_word(w, text) for w in words)
+
+
 def parse(text):
     if not text:
         return {"intent": "help", "crop": None, "quantity_kg": None, "offer_price": None}
     t_clean = text.lower().translate(BN_DIGITS)
-    crop = next((c for c, ws in CROP_WORDS.items() if any(w in t_clean for w in ws)), None)
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(কেজি|kg|কেজি|মণ|mon|maund)", t_clean)
+    crop = next((c for c, ws in CROP_WORDS.items() if _matches_any(ws, t_clean)), None)
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(কেজি|kg\b|মণ|mon\b|maund\b)", t_clean)
     qty = None
     if m:
         qty = float(m.group(1)) * (40 if m.group(2) in ("মণ", "mon", "maund") else 1)
-    mp = re.search(r"(\d+(?:\.\d+)?)\s*(টাকা|tk|bdt|taka|৳)", t_clean)
-    offer_price = float(mp.group(1)) if mp and any(w in t_clean for w in NEG) else None
+    mp = re.search(r"(\d+(?:\.\d+)?)\s*(টাকা|tk\b|bdt\b|taka\b|৳)", t_clean)
+    offer_price = float(mp.group(1)) if mp and _matches_any(NEG, t_clean) else None
 
-    if any(w in t_clean for w in GREETING) and not crop and not offer_price:
+    if _matches_any(GREETING, t_clean) and not crop and not offer_price:
         intent = "greeting"
     elif offer_price:
         intent = "negotiate"
-    elif any(w in t_clean for w in LOSS):
+    elif _matches_any(LOSS, t_clean):
         intent = "loss"
-    elif any(w in t_clean for w in SELL):
+    elif _matches_any(SELL, t_clean):
         intent = "sell"
-    elif any(w in t_clean for w in PRICE):
+    elif _matches_any(PRICE, t_clean):
         intent = "price"
     else:
         intent = "general"
@@ -115,17 +125,26 @@ def ask_gemini(user_prompt: str, context: dict, lang: str = "bn") -> str:
         }
     }
 
-    # Try primary model, fallback to alternate flash-lite model if needed
+    # Try primary model, fallback to alternate flash-lite model if needed (up to 3 sequential calls, 8s total budget)
     models_to_try = [model_endpoint, "gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]
+    start_time = time.time()
+    total_budget = 8.0
     for m in dict.fromkeys(models_to_try):
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
+        remaining = total_budget - (time.time() - start_time)
+        if remaining <= 0:
+            break
+        timeout = min(6.0, remaining)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
         try:
             req = urllib.request.Request(
                 url,
                 data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"}
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": api_key
+                }
             )
-            with urllib.request.urlopen(req, timeout=6) as response:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
                 res_data = json.loads(response.read().decode("utf-8"))
                 candidates = res_data.get("candidates", [])
                 if candidates:

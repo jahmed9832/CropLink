@@ -76,24 +76,19 @@ export default function AssistantScreen() {
     setDraftLoading(true);
     setDraftResult(null);
     try {
+      const bOffer = parseFloat(buyerOffer) || 50;
       const res = await api.draftCounterOffer({
         crop: negCrop,
         quantity_kg: parseFloat(negQty) || 500,
         production_cost_per_kg: parseFloat(prodCost) || 45,
-        buyer_offered_price: parseFloat(buyerOffer) || 50,
+        offers: [{ price_per_kg: bOffer }],
       });
       setDraftResult(res);
-    } catch (_) {
-      // Fallback calculation for demo
-      const minAcceptable = Math.round(parseFloat(prodCost) * 1.25);
-      const counterPrice = Math.max(minAcceptable, parseFloat(buyerOffer) + 8);
-      setDraftResult({
-        minimum_acceptable_price: minAcceptable,
-        suggested_counter_price: counterPrice,
-        is_buyer_offer_acceptable: parseFloat(buyerOffer) >= minAcceptable,
-        draft_message_bn: `জনাব, আমার উৎপাদিত ${negCrop} এ গ্রেডের উন্নত মানের। বর্তমান খরচ ও পরিবহন বিবেচনায় আমি ৳${buyerOffer} এর জায়গায় ৳${counterPrice} আশা করছি। আশা করি বিবেচনা করবেন।`,
-        draft_message_en: `Dear Buyer, for Grade A ${negCrop}, considering my production and logistics costs, I propose ৳${counterPrice}/kg instead of ৳${buyerOffer}/kg.`,
-      });
+    } catch (err) {
+      Alert.alert(
+        lang === 'bn' ? 'দর কষাকষি সহায়িকা ত্রুটি' : 'Negotiation Error',
+        err.message || (lang === 'bn' ? 'কাউন্টার অফার তৈরি করা সম্ভব হয়নি।' : 'Failed to draft counter offer.')
+      );
     } finally {
       setDraftLoading(false);
     }
@@ -281,16 +276,35 @@ export default function AssistantScreen() {
                 <View style={styles.draftTop}>
                   <Text style={styles.draftPriceLabel}>{t.minPrice}</Text>
                   <Text style={styles.draftPriceVal}>
-                    ৳{draftResult.minimum_acceptable_price || Math.round(prodCost * 1.2)} / kg
+                    ৳{draftResult.minimum_acceptable_price_per_kg ?? '—'} / kg
                   </Text>
                 </View>
+
+                {draftResult.offers && draftResult.offers[0] && (
+                  <View style={{ marginTop: 8 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ color: COLORS.textMuted, fontSize: 13 }}>
+                        {lang === 'bn' ? 'প্রস্তাবিত অ্যাকশন:' : 'Action:'}
+                      </Text>
+                      <Badge
+                        label={draftResult.offers[0].action === 'accept' ? 'Accept Offer' : 'Counter Offer'}
+                        variant={draftResult.offers[0].action === 'accept' ? 'green' : 'orange'}
+                      />
+                    </View>
+                    {draftResult.offers[0].suggested_counter_price && draftResult.offers[0].action !== 'accept' && (
+                      <Text style={{ color: COLORS.cyan, fontWeight: '700', fontSize: 14, marginTop: 4 }}>
+                        {lang === 'bn' ? 'প্রস্তাবিত পাল্টা দর:' : 'Suggested Counter:'} ৳{draftResult.offers[0].suggested_counter_price}/kg
+                      </Text>
+                    )}
+                  </View>
+                )}
 
                 <View style={styles.draftBox}>
                   <Text style={styles.draftBoxHeader}>📝 {t.draftMessage}</Text>
                   <Text style={styles.draftBodyText}>
                     {lang === 'bn'
-                      ? draftResult.draft_message_bn || draftResult.draft_message
-                      : draftResult.draft_message_en || draftResult.draft_message}
+                      ? (draftResult.offers?.[0]?.draft_message_bn || draftResult.offers?.[0]?.draft_message || '')
+                      : (draftResult.offers?.[0]?.draft_message_en || draftResult.offers?.[0]?.draft_message || '')}
                   </Text>
                 </View>
 
@@ -298,8 +312,8 @@ export default function AssistantScreen() {
                   onPress={() =>
                     copyToClipboard(
                       lang === 'bn'
-                        ? draftResult.draft_message_bn || draftResult.draft_message
-                        : draftResult.draft_message_en || draftResult.draft_message
+                        ? (draftResult.offers?.[0]?.draft_message_bn || draftResult.offers?.[0]?.draft_message || '')
+                        : (draftResult.offers?.[0]?.draft_message_en || draftResult.offers?.[0]?.draft_message || '')
                     )
                   }
                   style={styles.copyBtn}

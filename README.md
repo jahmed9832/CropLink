@@ -44,10 +44,13 @@ See `docs/API_GUIDE.md`, section "Languages".
 | `PYTHON_VERSION` | Render | `3.12.3` |
 | `SEED_DEMO` | no | `true` creates demo accounts and sample data at startup. Set `false` in production |
 | `ADMIN_PHONE`, `ADMIN_PASSWORD` | no | Creates your own admin account |
-| `OPENWEATHER_API_KEY` | no | Enables real weather. Without it the engine uses the request's temperature or 30 C |
+| `OPENWEATHER_API_KEY` | no | Enables real weather. Without it the engine uses Open-Meteo or default fallback |
+| `GEMINI_API_KEY` | no | Enables Google Gemini assistant for conversational chat |
+| `GEMINI_MODEL` | no | Gemini model name (default: gemini-2.5-flash) |
+| `ALLOW_SYNTHETIC_DATA` | no | `false` in production (503 on bundled data); `true` in local dev/tests |
 | `DEFAULT_LANG` | no | `bn` (default) or `en` |
 | `API_KEY` | no | Leave empty. If set, every request needs an `X-API-Key` header |
-| `ALLOWED_ORIGINS` | no | CORS origins, default `*` |
+| `ALLOWED_ORIGINS` | no | CORS origins, set to specific front-end domain in production |
 
 Never commit real values of these variables. Set them in the Render dashboard (or your shell for local runs).
 
@@ -70,7 +73,7 @@ Open `http://127.0.0.1:8000/docs`.
    - Build command: `pip install -r requirements.txt && python -m app.ml.train_all`
    - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
    - Instance type: Free, region: Singapore
-   - Environment variables: `MONGODB_URI`, `JWT_SECRET`, `PYTHON_VERSION=3.12.3`, `SEED_DEMO=true`
+   - Environment variables: `MONGODB_URI`, `JWT_SECRET`, `PYTHON_VERSION=3.12.3`, `SEED_DEMO=false`, `ENVIRONMENT=production`, `ALLOW_SYNTHETIC_DATA=false`
 4. Open `<URL>/health` - it must show `"database": "mongodb"`.
 
 The free Render plan sleeps after 15 minutes of inactivity; the first request afterwards takes 30-50 seconds.

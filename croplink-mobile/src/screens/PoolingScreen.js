@@ -87,21 +87,11 @@ export default function PoolingScreen() {
     try {
       const res = await api.createPoolPlan(demand.id);
       setPoolPlan(res);
-    } catch (_) {
-      // Mock plan aligned with backend pooling logic
-      setPoolPlan({
-        demand_id: demand.id,
-        target_quantity_kg: demand.min_quantity_kg,
-        matched_lots_count: 3,
-        total_pooled_kg: demand.min_quantity_kg,
-        logistics_cost_savings_pct: 22.5,
-        estimated_price_bdt: demand.target_price_bdt,
-        farmer_allocations: [
-          { farmer_name: user?.name || 'আপনার অংশ (You)', allocated_kg: 400, expected_payout_bdt: 400 * demand.target_price_bdt * 0.96 },
-          { farmer_name: 'আব্দুল করিম (Gazipur)', allocated_kg: 500, expected_payout_bdt: 500 * demand.target_price_bdt * 0.96 },
-          { farmer_name: 'মো: রফিকুল (Tangail)', allocated_kg: 300, expected_payout_bdt: 300 * demand.target_price_bdt * 0.96 },
-        ],
-      });
+    } catch (err) {
+      Alert.alert(
+        lang === 'bn' ? 'পুল পরিকল্পনা ত্রুটি' : 'Pool Plan Error',
+        err.message || (lang === 'bn' ? 'পুল পরিকল্পনা তৈরি করা যায়নি।' : 'Failed to generate pool plan.')
+      );
     } finally {
       setPlanning(false);
     }
@@ -127,17 +117,17 @@ export default function PoolingScreen() {
               <View>
                 <Text style={styles.buyerName}>{d.buyer_name || 'Verified Buyer'}</Text>
                 <Text style={styles.cropTag}>
-                  {d.crop?.toUpperCase()} • Grade {d.grade} • 📍 {d.destination || 'Dhaka'}
+                  {d.crop?.toUpperCase()} • Grade {d.min_grade || d.grade || 'C'} • 📍 {typeof d.location === 'object' ? (d.location?.district || d.location?.address || 'Dhaka') : (d.location || d.destination || 'Dhaka')}
                 </Text>
               </View>
-              <Badge label={`৳${d.target_price_bdt}/kg`} variant="green" />
+              <Badge label={`৳${d.price_per_kg ?? d.target_price_bdt}/kg`} variant="green" />
             </View>
 
             <View style={styles.qtyRow}>
               <Text style={styles.qtyLabel}>
                 {lang === 'bn' ? 'ন্যূনতম চাহিদা:' : 'Min Required:'}
               </Text>
-              <Text style={styles.qtyVal}>{d.min_quantity_kg} kg</Text>
+              <Text style={styles.qtyVal}>{d.min_quantity_kg || d.quantity_kg} kg</Text>
             </View>
 
             <GradientButton
@@ -163,31 +153,45 @@ export default function PoolingScreen() {
                 <Text style={styles.bannerLabel}>
                   {lang === 'bn' ? 'মোট যৌথ ফসল' : 'Total Volume'}
                 </Text>
-                <Text style={styles.bannerVal}>{poolPlan.total_pooled_kg} kg</Text>
+                <Text style={styles.bannerVal}>{poolPlan.pooled_kg} kg</Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.bannerCol}>
                 <Text style={styles.bannerLabel}>
-                  {lang === 'bn' ? 'পরিবহন সাশ্রয়' : 'Logistics Saving'}
+                  {lang === 'bn' ? 'পূরণ হার' : 'Fill Rate'}
                 </Text>
                 <Text style={[styles.bannerVal, { color: COLORS.neonGreen }]}>
-                  {poolPlan.logistics_cost_savings_pct || 22}%
+                  {poolPlan.fill_rate_pct}%
                 </Text>
               </View>
             </View>
 
+            <View style={[styles.qtyRow, { marginTop: 10 }]}>
+              <Text style={styles.qtyLabel}>
+                {lang === 'bn' ? 'প্রয়োজনীয় পরিমাণ:' : 'Required Volume:'}
+              </Text>
+              <Text style={styles.qtyVal}>{poolPlan.required_kg} kg</Text>
+            </View>
+
             <Text style={styles.allocHeader}>
-              {lang === 'bn' ? 'অংশগ্রহণকারী কৃষকদের পাওনা:' : 'Farmer Allocation & Payout:'}
+              {lang === 'bn' ? 'অংশগ্রহণকারী কৃষকদের বরাদ্দ ও পাওনা:' : 'Farmer Allocation & Payout:'}
             </Text>
 
-            {poolPlan.farmer_allocations?.map((f, idx) => (
+            {poolPlan.allocations?.map((a, idx) => (
               <View key={idx} style={styles.allocRow}>
                 <View>
-                  <Text style={styles.farmerName}>{f.farmer_name}</Text>
-                  <Text style={styles.allocKg}>{f.allocated_kg} kg বরাদ্দ</Text>
+                  <Text style={styles.farmerName}>
+                    {a.farmer_id === user?.user_id ? (lang === 'bn' ? 'আপনার অংশ (You)' : 'Your Share') : a.farmer_id}
+                  </Text>
+                  <Text style={styles.allocKg}>{a.allocated_kg} kg বরাদ্দ</Text>
+                  {a.logistics_share > 0 && (
+                    <Text style={{ fontSize: 11, color: COLORS.textMuted }}>
+                      {lang === 'bn' ? 'পরিবহন খরচ অংশ:' : 'Logistics share:'} ৳{a.logistics_share}
+                    </Text>
+                  )}
                 </View>
                 <Text style={styles.allocMoney}>
-                  ৳{Math.round(f.expected_payout_bdt).toLocaleString()}
+                  ৳{Math.round(a.expected_payment || 0).toLocaleString()}
                 </Text>
               </View>
             ))}

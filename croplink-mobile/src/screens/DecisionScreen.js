@@ -34,6 +34,8 @@ export default function DecisionScreen() {
   const [handlingCost, setHandlingCost] = useState('0.5');
   const [storageCost, setStorageCost] = useState('0.3');
   const [spoilageRisk, setSpoilageRisk] = useState('0.035');
+  const [costsEdited, setCostsEdited] = useState(false);
+  const [spoilageEdited, setSpoilageEdited] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -54,15 +56,19 @@ export default function DecisionScreen() {
         quantity_kg: qtyNum,
         grade,
         market,
-        costs: {
+      };
+      if (costsEdited) {
+        payload.costs = {
           transport_per_kg_km: parseFloat(transportCost) || 0.02,
           handling_per_kg: parseFloat(handlingCost) || 0.5,
           storage_per_kg_day: parseFloat(storageCost) || 0.3,
           commission_pct: 2.0,
           local_market_km: 15,
-        },
-        spoilage_per_day: parseFloat(spoilageRisk) || 0.035,
-      };
+        };
+      }
+      if (spoilageEdited) {
+        payload.spoilage_per_day = parseFloat(spoilageRisk) || 0.035;
+      }
 
       const res = await api.decide(payload);
       setResult(res);
@@ -166,7 +172,7 @@ export default function DecisionScreen() {
                 style={styles.smallInput}
                 keyboardType="numeric"
                 value={transportCost}
-                onChangeText={setTransportCost}
+                onChangeText={(val) => { setTransportCost(val); setCostsEdited(true); }}
               />
             </View>
             <View style={styles.costItem}>
@@ -175,7 +181,7 @@ export default function DecisionScreen() {
                 style={styles.smallInput}
                 keyboardType="numeric"
                 value={handlingCost}
-                onChangeText={setHandlingCost}
+                onChangeText={(val) => { setHandlingCost(val); setCostsEdited(true); }}
               />
             </View>
             <View style={styles.costItem}>
@@ -184,7 +190,7 @@ export default function DecisionScreen() {
                 style={styles.smallInput}
                 keyboardType="numeric"
                 value={storageCost}
-                onChangeText={setStorageCost}
+                onChangeText={(val) => { setStorageCost(val); setCostsEdited(true); }}
               />
             </View>
             <View style={styles.costItem}>
@@ -193,7 +199,7 @@ export default function DecisionScreen() {
                 style={styles.smallInput}
                 keyboardType="numeric"
                 value={spoilageRisk}
-                onChangeText={setSpoilageRisk}
+                onChangeText={(val) => { setSpoilageRisk(val); setSpoilageEdited(true); }}
               />
             </View>
           </View>

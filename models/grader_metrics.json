@@ -3,5 +3,11 @@
   "accuracy": 0.955,
   "macro_f1": 0.955,
   "n_test": 600,
-  "warning": "Metrics are on synthetic data. Real accuracy cannot be claimed until retrained on real Bangladesh crop photos."
+  "warning": "Metrics are on synthetic data. Real accuracy cannot be claimed until retrained on real Bangladesh crop photos.",
+  "versions": {
+    "scikit-learn": "1.9.1",
+    "numpy": "2.5.4",
+    "joblib": "1.6.0",
+    "pillow": "13.0.0"
+  }
 }

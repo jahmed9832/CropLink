@@ -1,4 +1,11 @@
 import math
+from datetime import datetime, date
+from zoneinfo import ZoneInfo
+
+DHAKA_TZ = ZoneInfo("Asia/Dhaka")
+
+def dhaka_today() -> date:
+    return datetime.now(DHAKA_TZ).date()
 
 CROPS = ["tomato", "potato", "onion", "brinjal", "chili", "cabbage", "rice"]
 MARKETS = ["Dhaka", "Chattogram", "Rajshahi", "Bogura", "Khulna"]

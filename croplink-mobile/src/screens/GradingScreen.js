@@ -83,46 +83,24 @@ export default function GradingScreen() {
     setLoading(true);
     setGradeResult(null);
     setPassport(null);
+    setError('');
     try {
       let res;
-      // 1. Try ultra-reliable Base64 JSON first (works 100% on all Android/iOS)
+      // 1. Try Base64 JSON if available
       if (asset.base64) {
-        try {
-          res = await api.gradePhotoBase64(asset.base64, selectedCrop);
-        } catch (_) {}
-      }
-
-      // 2. Fallback to multipart if needed
-      if (!res) {
-        try {
-          res = await api.gradePhotoOnly(asset.uri);
-        } catch (err) {
-          const batchRes = await api.gradePhotoFromUri(
-            asset.uri,
-            selectedCrop,
-            500,
-            user?.district || 'Gazipur',
-            user?.id || 'guest_farmer'
-          );
-          res = batchRes.grading || batchRes;
-          if (batchRes.batch) {
-            setPassport({
-              batch_id: batchRes.batch.id,
-              tamper_evident_hash: batchRes.batch.passport_hash,
-              origin: user?.district || 'Gazipur',
-              harvest_date: batchRes.batch.harvest_date,
-            });
-          }
-        }
+        res = await api.gradePhotoBase64(asset.base64, selectedCrop);
+      } else if (asset.uri) {
+        // 2. Multipart upload
+        res = await api.gradePhotoOnly(asset.uri);
       }
 
       if (res) {
         setGradeResult({ ...res, crop: selectedCrop });
       }
     } catch (err) {
-      setError(
-        err.message || (lang === 'bn' ? 'ছবি বিশ্লেষণ করা সম্ভব হয়নি।' : 'Failed to analyze photo.')
-      );
+      const errMsg = err.message || (lang === 'bn' ? 'ছবি বিশ্লেষণ করা সম্ভব হয়নি।' : 'Failed to analyze photo.');
+      setError(errMsg);
+      Alert.alert(lang === 'bn' ? 'গ্রেডিং ত্রুটি' : 'Grading Error', errMsg);
     } finally {
       setLoading(false);
     }

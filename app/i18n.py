@@ -185,7 +185,7 @@ C = {
     "err.phone_exists": {"bn": "এই ফোন নম্বর দিয়ে আগেই অ্যাকাউন্ট খোলা আছে।", "en": "An account with this phone number already exists."},
     "err.login_bad": {"bn": "ফোন নম্বর বা পাসওয়ার্ড ভুল।", "en": "Wrong phone number or password."},
     "err.admin_edit": {"bn": "অ্যাডমিনের প্রোফাইল এখান থেকে বদলানো যায় না।", "en": "The admin profile cannot be edited here."},
-    "err.img_big": {"bn": "ছবির আকার ৮ এমবির বেশি।", "en": "The image is larger than 8 MB."},
+    "err.img_big": {"bn": "ছবির আকার ২০ এমবির বেশি।", "en": "The image is larger than 20 MB."},
     "err.img_bad": {"bn": "ছবিটি পড়া গেল না, jpg বা png দিন।", "en": "Could not read the image; please send a jpg or png."},
     "err.photo_big": {"bn": "ছবির ডেটা অনেক বড়; ছোট থাম্বনেইল বা photo_url দিন।", "en": "The photo data is too large; send a small thumbnail or a photo_url."},
     "err.qty": {"bn": "পরিমাণ ০-এর বেশি হতে হবে।", "en": "Quantity must be greater than 0."},

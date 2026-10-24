@@ -3,23 +3,20 @@ import io
 import json
 import os
 import base64
+from typing import Optional
 
 import joblib
 import numpy as np
+import PIL
+import sklearn
 from PIL import Image, ImageDraw, ImageFilter, ImageOps, ImageFile
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 
-# Allow opening truncated / partial uploads
-ImageFile.LOAD_TRUNCATED_IMAGES = True
-
-# Register HEIC/HEIF opener so iPhone and modern Android photos work seamlessly
-try:
-    import pillow_heif
-    pillow_heif.register_heif_opener()
-except Exception:
-    pass
+# Safe limits for image uploads
+ImageFile.LOAD_TRUNCATED_IMAGES = False
+Image.MAX_IMAGE_PIXELS = 10_000_000  # Safe cap (10 MP) to prevent decompression bombs
 
 from ..config import settings
 from ..i18n import t
@@ -28,21 +25,62 @@ GRADES = ["A", "B", "C"]
 LOW_CONFIDENCE = 0.60
 
 
-def safe_open_image(data: bytes) -> Image.Image:
-    """Safely open any image format (JPEG, PNG, HEIC, WEBP, BMP, AVIF, TIFF) and convert to RGB."""
-    try:
-        img = Image.open(io.BytesIO(data))
-    except Exception:
-        # Check if incoming data is base64 encoded
+class ImageDecodeError(ValueError):
+    """Raised when image bytes cannot be decoded."""
+    pass
+
+
+def safe_open_image(data: bytes, return_issues: bool = False):
+    """Safely open any image format (JPEG, PNG, WEBP, BMP, AVIF, TIFF) and convert to RGB.
+    Note: HEIC is unsupported unless external codec library is installed.
+    """
+    if not data or len(data) == 0:
+        raise ImageDecodeError("Empty image payload")
+
+    raw = data
+    issues = []
+
+    # Check if data-URL base64
+    if b";base64," in data[:128]:
         try:
-            if b";base64," in data[:100]:
-                raw = base64.b64decode(data.split(b";base64,")[1])
-                img = Image.open(io.BytesIO(raw))
-            else:
-                img = Image.open(io.BytesIO(base64.b64decode(data)))
+            raw = base64.b64decode(data.split(b";base64,", 1)[1], validate=True)
+        except Exception as e:
+            raise ImageDecodeError(f"Invalid data-URL base64: {e}") from e
+    else:
+        # Check if raw data starts with non-image ASCII base64 characters
+        # Try raw first; if that fails, try strict base64 decode with validate=True
+        try:
+            bio = io.BytesIO(raw)
+            Image.open(bio)
         except Exception:
-            # Fallback: create a representative default canvas
-            img = Image.new("RGB", (96, 96), (180, 70, 50))
+            try:
+                raw = base64.b64decode(raw, validate=True)
+            except Exception as e:
+                raise ImageDecodeError(f"Cannot decode image data: {e}") from e
+
+    try:
+        bio = io.BytesIO(raw)
+        img = Image.open(bio)
+        img.load()
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning) as e:
+        raise ImageDecodeError("Image exceeds maximum pixel dimensions (decompression bomb)") from e
+    except (OSError, IOError) as e:
+        if "truncated" in str(e).lower():
+            # Turn on truncated images only for this fallback read
+            try:
+                ImageFile.LOAD_TRUNCATED_IMAGES = True
+                bio.seek(0)
+                img = Image.open(bio)
+                img.load()
+                issues.append("truncated_image")
+            except Exception as e2:
+                raise ImageDecodeError(f"Cannot decode truncated image: {e2}") from e2
+            finally:
+                ImageFile.LOAD_TRUNCATED_IMAGES = False
+        else:
+            raise ImageDecodeError(f"Cannot read image: {e}") from e
+    except Exception as e:
+        raise ImageDecodeError(f"Cannot read image: {e}") from e
 
     try:
         img = ImageOps.exif_transpose(img)
@@ -52,39 +90,53 @@ def safe_open_image(data: bytes) -> Image.Image:
     if img.mode != "RGB":
         try:
             img = img.convert("RGB")
-        except Exception:
-            img = Image.new("RGB", img.size, (150, 150, 150))
+        except Exception as e:
+            raise ImageDecodeError(f"Cannot convert image to RGB: {e}") from e
 
     # Downscale very large photos to keep processing fast (<0.05s)
     if img.width > 1200 or img.height > 1200:
         img.thumbnail((1200, 1200))
 
+    if return_issues:
+        return img, issues
     return img
 
 
 def image_features(img: Image.Image):
-    try:
-        img = img.convert("RGB").resize((96, 96))
-        hsv = np.asarray(img.convert("HSV"), dtype=np.float32) / 255.0
-        h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
-        fg = (s > 0.20) | (v < 0.40)  # background = light/gray
-        n = max(1, int(fg.sum()))
-        frac_fg = n / fg.size
+    img = img.convert("RGB").resize((96, 96))
+    hsv = np.asarray(img.convert("HSV"), dtype=np.float32) / 255.0
+    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    fg = (s > 0.20) | (v < 0.40)  # background = light/gray
+    n = max(1, int(fg.sum()))
+    frac_fg = n / fg.size
+    hf, sf, vf = h[fg], s[fg], v[fg]
+    if hf.size == 0:
+        hf, sf, vf = h.ravel(), s.ravel(), v.ravel()
+    dark = float(((vf < 0.30)).mean())
+    brown = float(((hf > 0.04) & (hf < 0.11) & (vf < 0.50) & (sf > 0.3)).mean())
+    green = float(((hf > 0.18) & (hf < 0.45)).mean())
+    red = float(((hf < 0.04) | (hf > 0.93)).mean())
+    yellow = float(((hf >= 0.08) & (hf <= 0.18)).mean())
+    gray = np.asarray(img.convert("L"), dtype=np.float32) / 255.0
+    gy, gx = np.gradient(gray)
+    edge = float(np.sqrt(gx ** 2 + gy ** 2)[fg].mean()) if fg.any() else 0.0
+    return [frac_fg, float(hf.mean()), float(sf.mean()), float(vf.mean()), float(sf.std()), float(vf.std()),
+            dark, brown, green, red, yellow, edge]
+
+
+def compute_defect_pct(img: Image.Image) -> float:
+    img = img.convert("RGB").resize((96, 96))
+    hsv = np.asarray(img.convert("HSV"), dtype=np.float32) / 255.0
+    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    fg = (s > 0.20) | (v < 0.40)
+    if not fg.any():
+        hf, sf, vf = h.ravel(), s.ravel(), v.ravel()
+    else:
         hf, sf, vf = h[fg], s[fg], v[fg]
-        if hf.size == 0:
-            hf, sf, vf = h.ravel(), s.ravel(), v.ravel()
-        dark = float(((vf < 0.30)).mean())
-        brown = float(((hf > 0.04) & (hf < 0.11) & (vf < 0.50) & (sf > 0.3)).mean())
-        green = float(((hf > 0.18) & (hf < 0.45)).mean())
-        red = float(((hf < 0.04) | (hf > 0.93)).mean())
-        yellow = float(((hf >= 0.08) & (hf <= 0.18)).mean())
-        gray = np.asarray(img.convert("L"), dtype=np.float32) / 255.0
-        gy, gx = np.gradient(gray)
-        edge = float(np.sqrt(gx ** 2 + gy ** 2)[fg].mean()) if fg.any() else 0.0
-        return [frac_fg, float(hf.mean()), float(sf.mean()), float(vf.mean()), float(sf.std()), float(vf.std()),
-                dark, brown, green, red, yellow, edge]
-    except Exception:
-        return [0.75, 0.35, 0.65, 0.70, 0.15, 0.15, 0.05, 0.05, 0.50, 0.30, 0.10, 0.05]
+    # Single combined boolean mask so pixels aren't counted twice
+    defect_mask = (vf < 0.30) | ((hf > 0.04) & (hf < 0.11) & (vf < 0.50) & (sf > 0.3))
+    pct = float(defect_mask.mean()) * 100.0
+    return max(0.0, min(100.0, round(pct, 1)))
 
 
 PALETTES = [(205, 40, 35), (150, 40, 60), (60, 140, 50), (190, 150, 90), (215, 130, 40), (110, 170, 70), (120, 60, 140)]
@@ -151,10 +203,20 @@ def train(n_per_class=1000, seed=11):
     clf = RandomForestClassifier(n_estimators=250, min_samples_leaf=3, random_state=0)
     clf.fit(Xtr, ytr)
     p = clf.predict(Xte)
-    metrics = {"data_source": source, "accuracy": round(float(accuracy_score(yte, p)), 3),
-               "macro_f1": round(float(f1_score(yte, p, average="macro")), 3), "n_test": int(len(yte)),
-               "warning": "Metrics are on synthetic data. Real accuracy cannot be claimed until retrained on real Bangladesh crop photos."
-               if source == "synthetic" else None}
+    metrics = {
+        "data_source": source,
+        "accuracy": round(float(accuracy_score(yte, p)), 3),
+        "macro_f1": round(float(f1_score(yte, p, average="macro")), 3),
+        "n_test": int(len(yte)),
+        "warning": "Metrics are on synthetic data. Real accuracy cannot be claimed until retrained on real Bangladesh crop photos."
+        if source == "synthetic" else None,
+        "versions": {
+            "scikit-learn": sklearn.__version__,
+            "numpy": np.__version__,
+            "joblib": joblib.__version__,
+            "pillow": PIL.__version__
+        }
+    }
     clf.fit(X, y)
     os.makedirs(settings.MODELS_DIR, exist_ok=True)
     joblib.dump(clf, os.path.join(settings.MODELS_DIR, "grader.joblib"))
@@ -165,35 +227,39 @@ def train(n_per_class=1000, seed=11):
 
 class Grader:
     def __init__(self):
-        self.clf = joblib.load(os.path.join(settings.MODELS_DIR, "grader.joblib"))
-        with open(os.path.join(settings.MODELS_DIR, "grader_metrics.json")) as fh:
+        model_path = os.path.join(settings.MODELS_DIR, "grader.joblib")
+        metrics_path = os.path.join(settings.MODELS_DIR, "grader_metrics.json")
+        if not os.path.exists(model_path) or not os.path.exists(metrics_path):
+            raise FileNotFoundError("Grader model or metrics file not found")
+        self.clf = joblib.load(model_path)
+        with open(metrics_path) as fh:
             self.metrics = json.load(fh)
 
-    def grade_bytes(self, data: bytes):
-        try:
-            img = safe_open_image(data)
-            f = np.array([image_features(img)])
-            proba = self.clf.predict_proba(f)[0]
-            idx = int(np.argmax(proba))
-            feats = f[0]
-            conf = float(proba[idx])
-            issues = []
-            if feats[0] < 0.12:
-                issues.append(t("grade.small"))
-            if feats[3] < 0.2:
-                issues.append(t("grade.dark"))
-            needs_review = conf < LOW_CONFIDENCE or bool(issues)
-            return {"grade": self.clf.classes_[idx], "confidence": round(conf, 3),
-                    "probabilities": {c: round(float(p), 3) for c, p in zip(self.clf.classes_, proba)},
-                    "visible_defect_pct": round(float(feats[6] + feats[7]) * 100, 1),
-                    "needs_manual_review": needs_review, "image_issues": issues,
-                    "model_note": t("grade.note"),
-                    "model_data_source": self.metrics.get("data_source")}
-        except Exception:
-            # Absolute fallback: grade as Grade B with 0.85 confidence so user request never fails
-            return {"grade": "B", "confidence": 0.85,
-                    "probabilities": {"A": 0.10, "B": 0.85, "C": 0.05},
-                    "visible_defect_pct": 5.0,
-                    "needs_manual_review": False, "image_issues": [],
-                    "model_note": t("grade.note"),
-                    "model_data_source": self.metrics.get("data_source", "synthetic")}
+        saved_sklearn = self.metrics.get("versions", {}).get("scikit-learn")
+        if saved_sklearn and saved_sklearn != sklearn.__version__:
+            raise RuntimeError(f"Grader scikit-learn version mismatch: model was trained on {saved_sklearn}, current is {sklearn.__version__}")
+
+    def grade_bytes(self, data: bytes, crop: Optional[str] = "tomato"):
+        img, issues = safe_open_image(data, return_issues=True)
+        f = np.array([image_features(img)])
+        proba = self.clf.predict_proba(f)[0]
+        idx = int(np.argmax(proba))
+        feats = f[0]
+        conf = float(proba[idx])
+        if feats[0] < 0.12:
+            issues.append(t("grade.small"))
+        if feats[3] < 0.2:
+            issues.append(t("grade.dark"))
+        needs_review = conf < LOW_CONFIDENCE or bool(issues)
+        defect_pct = compute_defect_pct(img)
+        return {
+            "crop": crop or "tomato",
+            "grade": self.clf.classes_[idx],
+            "confidence": round(conf, 3),
+            "probabilities": {c: round(float(p), 3) for c, p in zip(self.clf.classes_, proba)},
+            "visible_defect_pct": defect_pct,
+            "needs_manual_review": needs_review,
+            "image_issues": issues,
+            "model_note": t("grade.note"),
+            "model_data_source": self.metrics.get("data_source", "synthetic")
+        }

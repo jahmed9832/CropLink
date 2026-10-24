@@ -11,8 +11,12 @@ def min_price_for_target(crop, qty, target_net, km, costs, spoilage_per_day, hea
     c = {**DEFAULT_COSTS, **(costs or {})}
     sp = _spoil(crop, km / TRANSIT_KMH / 24 * heat, spoilage_per_day)
     fixed = (0 if pickup else qty * km * c["transport_per_kg_km"]) + qty * c["handling_per_kg"]
-    denom = qty * (1 - sp) * (1 - haircut) * (1 - c["commission_pct"] / 100)
+    comm_pct = min(99.99, max(0.0, c.get("commission_pct", 0)))
+    denom = qty * (1 - sp) * (1 - haircut) * (1 - comm_pct / 100)
+    if denom <= 0:
+        return target_net + fixed
     return (target_net + fixed) / denom
+
 
 
 def _draft(lang, crop, qty, grade, offer, counter, action):
@@ -36,7 +40,8 @@ def counter_offers(crop, qty, grade, current_price, forecast, offers, costs=None
     fair = current_price * GRADE_FACTOR.get(grade, 1.0)
     results = []
     for o in offers:
-        km = float(o.get("distance_km", c["local_market_km"]))
+        km_val = o.get("distance_km")
+        km = float(km_val if km_val is not None else c["local_market_km"])
         risk = payment_risk(o.get("reliability", {"score": None}))
         mp = min_price_for_target(crop, qty, target, km, c, spoilage_per_day, heat, risk, bool(o.get("buyer_pickup")))
         offer = float(o["price_per_kg"])

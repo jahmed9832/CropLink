@@ -17,6 +17,18 @@ def _unb64(s: str) -> bytes:
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
 
 
+def normalize_phone(phone: str) -> str:
+    """Normalise phone numbers: strip spaces, convert +8801... / 8801... to 01..."""
+    if not phone:
+        return ""
+    p = "".join(str(phone).split())
+    if p.startswith("+880"):
+        p = "0" + p[4:]
+    elif p.startswith("880"):
+        p = "0" + p[3:]
+    return p
+
+
 def hash_password(password: str) -> str:
     salt = os.urandom(16)
     h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 200_000)

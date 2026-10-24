@@ -17,7 +17,11 @@ def _msgs(key, crop, market=None, **kw):
 def compute(crop, market, forecast, series, spike_pct=10.0, forecast_pct=7.0):
     prices = [float(p) for _, p in series]
     cur = forecast["current_price"]
-    avg30 = float(np.mean(prices[-30:]))
+    avg30 = float(np.mean(prices[-30:])) if prices else 0.0
+    if avg30 == 0 or cur == 0:
+        return {"crop": crop, "market": market, "current_price": cur, "avg_30d": round(avg30, 2),
+                "alerts": [], "has_alert": False, "skip_reason": "Zero price or zero 30-day average",
+                "as_of": forecast.get("as_of")}
     out = []
     dev = (cur / avg30 - 1) * 100
     if dev >= spike_pct:

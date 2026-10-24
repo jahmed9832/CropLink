@@ -47,33 +47,49 @@ def decide(crop, qty_kg, grade, current_price, forecast, offers=None, costs=None
     nets = {}
     for s in ("downside", "base", "best"):
         nets[s], br = _net(qty_kg, current_price, gf, sp, km_local, 0, c)
-    add("sell_now", t("opt.sell_now"), "market", nets, {"breakdown": br})
+    add("sell_now", t("opt.sell_now"), "market", nets, {"breakdown": br, "single_estimate": True})
 
-    # --- Wait 7 / 14 days
+    # --- Wait 7 / 14 days (rescale forecast if caller supplied an override current_price)
+    fc_cur = forecast.get("current_price") if forecast else None
+    scale = (current_price / fc_cur) if (fc_cur and current_price and fc_cur > 0) else 1.0
+
     for days, key in ((7, "h7"), (14, "h14")):
         f = forecast.get(key)
         if not f:
             continue
         sp = _sp(days * heat_factor + km_local / TRANSIT_KMH / 24)
+        scaled_f = {k: f[k] * scale for k in ("low", "base", "high")}
         nets = {}
         for s, k in (("downside", "low"), ("base", "base"), ("best", "high")):
-            nets[s], br = _net(qty_kg, f[k], gf, sp, km_local, days, c)
+            nets[s], br = _net(qty_kg, scaled_f[k], gf, sp, km_local, days, c)
         add(f"wait_{days}d", t("opt.wait", days=days), "wait", nets,
-            {"breakdown": br, "forecast_price_range": [f["low"], f["base"], f["high"]]})
+            {"breakdown": br, "forecast_price_range": [round(scaled_f["low"], 2), round(scaled_f["base"], 2), round(scaled_f["high"], 2)],
+             "rescaled": scale != 1.0})
 
     # --- Buyer offers
     for o in offers or []:
-        km = float(o.get("distance_km", 0))
+        min_q = float(o.get("min_quantity_kg") or 0.0)
+        demand_q = float(o.get("quantity_kg") if o.get("quantity_kg") is not None else qty_kg)
+        if min_q > qty_kg:
+            add(f"offer_{o.get('demand_id') or o.get('buyer_id')}",
+                t("opt.offer", name=o.get("buyer_name") or o.get("buyer_id") or "", price=o.get("price_per_kg", 0)),
+                "offer", {"downside": 0, "base": 0, "best": 0},
+                {"needs_pooling": True, "sellable_kg": 0, "min_quantity_kg": min_q,
+                 "demand_id": o.get("demand_id"), "buyer_id": o.get("buyer_id")})
+            continue
+
+        sellable_kg = min(qty_kg, demand_q)
+        km = float(o.get("distance_km") if o.get("distance_km") is not None else km_local)
         sp = _sp(km / TRANSIT_KMH / 24 * heat_factor)
         from .reliability import payment_risk
         risk = payment_risk(o.get("reliability", {"score": None}))
         nets = {}
         for s, hm in (("downside", 2.0), ("base", 1.0), ("best", 0.5)):
-            nets[s], br = _net(qty_kg, float(o["price_per_kg"]), 1.0, sp, km, 0, c,
+            nets[s], br = _net(sellable_kg, float(o["price_per_kg"]), 1.0, sp, km, 0, c,
                                payment_haircut=risk * hm, pickup=bool(o.get("buyer_pickup")))
         add(f"offer_{o.get('demand_id') or o.get('buyer_id')}",
             t("opt.offer", name=o.get("buyer_name") or o.get("buyer_id") or "", price=o["price_per_kg"]), "offer", nets,
-            {"breakdown": br, "payment_risk_pct": round(risk * 100, 1),
+            {"breakdown": br, "payment_risk_pct": round(risk * 100, 1), "sellable_kg": sellable_kg,
              "reliability_label": o.get("reliability", {}).get("label", "limited_history"),
              "demand_id": o.get("demand_id"), "buyer_id": o.get("buyer_id")})
 

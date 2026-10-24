@@ -94,6 +94,37 @@ export default function MarketPricesScreen() {
         </View>
       ) : (
         <>
+          {/* Visible Data Source / Synthetic Banner */}
+          {forecast && (
+            <View style={{
+              backgroundColor: forecast.is_synthetic ? 'rgba(255, 171, 0, 0.15)' : 'rgba(0, 242, 254, 0.15)',
+              borderWidth: 1,
+              borderColor: forecast.is_synthetic ? COLORS.warningOrange : COLORS.cyan,
+              borderRadius: 8,
+              padding: 10,
+              marginBottom: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+            }}>
+              <Ionicons
+                name={forecast.is_synthetic ? 'alert-circle-outline' : 'shield-checkmark-outline'}
+                size={18}
+                color={forecast.is_synthetic ? COLORS.warningOrange : COLORS.cyan}
+              />
+              <Text style={{
+                color: forecast.is_synthetic ? COLORS.warningOrange : COLORS.cyan,
+                fontSize: 12,
+                flex: 1,
+                fontWeight: '600',
+              }}>
+                {forecast.is_synthetic
+                  ? (lang === 'bn' ? `সিন্থেটিক ডেটা (উৎস: ${forecast.data_source || 'synthetic'}) • বয়স: ${forecast.data_age_days ?? 0} দিন` : `Synthetic Data (Source: ${forecast.data_source || 'synthetic'}) • Age: ${forecast.data_age_days ?? 0}d`)
+                  : (lang === 'bn' ? `বাস্তব বাজার ডেটা (উৎস: ${forecast.data_source})` : `Real Data (Source: ${forecast.data_source})`)}
+              </Text>
+            </View>
+          )}
+
           {/* AI 7 & 14 Day Forecast Card */}
           {forecast && (
             <Card glow>
@@ -103,7 +134,7 @@ export default function MarketPricesScreen() {
                     {selectedCrop.toUpperCase()} — {selectedMarket}
                   </Text>
                   <Text style={styles.forecastCurrent}>
-                    {t.currentPrice}: <Text style={{ color: COLORS.cyan, fontWeight: '800' }}>৳{forecast.current_price?.toFixed(1) || '86.5'}/kg</Text>
+                    {t.currentPrice}: <Text style={{ color: COLORS.cyan, fontWeight: '800' }}>৳{forecast.current_price != null ? forecast.current_price.toFixed(1) : '—'}/kg</Text>
                   </Text>
                 </View>
                 <Badge
@@ -117,18 +148,18 @@ export default function MarketPricesScreen() {
                 {/* 7 Days */}
                 <View style={styles.forecastBox}>
                   <Text style={styles.forecastBoxTitle}>📅 {t.forecast7d}</Text>
-                  <Text style={styles.forecastPrice}>৳{forecast.h7?.base?.toFixed(1) || '88.9'}</Text>
+                  <Text style={styles.forecastPrice}>৳{forecast.h7?.base != null ? forecast.h7.base.toFixed(1) : '—'}</Text>
                   <Text style={styles.forecastRangeText}>
-                    ({forecast.h7?.low?.toFixed(1)} - {forecast.h7?.high?.toFixed(1)})
+                    ({forecast.h7?.low != null ? forecast.h7.low.toFixed(1) : '—'} - {forecast.h7?.high != null ? forecast.h7.high.toFixed(1) : '—'})
                   </Text>
                 </View>
 
                 {/* 14 Days */}
                 <View style={styles.forecastBox}>
                   <Text style={styles.forecastBoxTitle}>📅 {t.forecast14d}</Text>
-                  <Text style={styles.forecastPrice}>৳{forecast.h14?.base?.toFixed(1) || '91.8'}</Text>
+                  <Text style={styles.forecastPrice}>৳{forecast.h14?.base != null ? forecast.h14.base.toFixed(1) : '—'}</Text>
                   <Text style={styles.forecastRangeText}>
-                    ({forecast.h14?.low?.toFixed(1)} - {forecast.h14?.high?.toFixed(1)})
+                    ({forecast.h14?.low != null ? forecast.h14.low.toFixed(1) : '—'} - {forecast.h14?.high != null ? forecast.h14.high.toFixed(1) : '—'})
                   </Text>
                 </View>
               </View>
@@ -147,7 +178,7 @@ export default function MarketPricesScreen() {
           <Text style={[styles.selectorLabel, { marginTop: 12 }]}>{t.todayPrices}</Text>
           <Card>
             {todayPrices.map((item, i) => {
-              const priceVal = Number(item.price_bdt_kg ?? item.price ?? 85).toFixed(1);
+              const priceVal = (item.price_bdt_kg ?? item.price) != null ? Number(item.price_bdt_kg ?? item.price).toFixed(1) : '—';
               const changeVal = Number(item.change_1d_pct ?? item.change_pct ?? 0);
               const marketText = item.market || selectedMarket || 'Dhaka';
 

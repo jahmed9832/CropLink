@@ -24,50 +24,20 @@ export default function OrdersScreen() {
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
 
+  const [evidenceError, setEvidenceError] = useState('');
+
   useEffect(() => {
     async function loadOrders() {
       setLoading(true);
       try {
         const res = await api.getOrders();
-        if (res && Array.isArray(res) && res.length > 0) {
+        if (res && Array.isArray(res)) {
           setOrders(res);
         } else {
-          // Fallback demo orders for prototype demonstration
-          setOrders([
-            {
-              id: 'ord_901',
-              crop: 'tomato',
-              quantity_kg: 500,
-              agreed_price_bdt: 88,
-              agreed_grade: 'A',
-              status: 'delivered',
-              buyer_name: 'Shwapno Super Shop',
-              created_at: '2026-10-22',
-            },
-            {
-              id: 'ord_902',
-              crop: 'potato',
-              quantity_kg: 1000,
-              agreed_price_bdt: 36,
-              agreed_grade: 'A',
-              status: 'in_delivery',
-              buyer_name: 'Meena Retail Ltd',
-              created_at: '2026-10-21',
-            },
-            {
-              id: 'ord_903',
-              crop: 'onion',
-              quantity_kg: 800,
-              agreed_price_bdt: 70,
-              agreed_grade: 'B',
-              status: 'disputed',
-              buyer_name: 'Karwan Bazar Aggregator',
-              created_at: '2026-10-20',
-            },
-          ]);
+          setOrders([]);
         }
       } catch (_) {
-        // demo fallback
+        setOrders([]);
       } finally {
         setLoading(false);
       }
@@ -79,32 +49,17 @@ export default function OrdersScreen() {
   const handleViewEvidence = async (orderId) => {
     setEvidenceLoading(true);
     setModalVisible(true);
+    setSelectedEvidence(null);
+    setEvidenceError('');
     try {
       const ev = await api.getDisputeEvidence(orderId);
       setSelectedEvidence(ev);
-    } catch (_) {
-      // Mock evidence aligned with backend dispute model
-      setSelectedEvidence({
-        order_id: orderId,
-        crop: 'onion',
-        pre_sale_evidence: {
-          grade: 'B',
-          suggested_price: 70,
-          timestamp: '2026-10-20 10:30 AM',
-          photo_verified: true,
-        },
-        delivery_observation: {
-          buyer_reported_grade: 'C',
-          buyer_reported_weight_kg: 760,
-          proposed_deduction_pct: 12.0,
-          reason: 'Moisture damage observed in 4 sacks during transit',
-          timestamp: '2026-10-20 04:15 PM',
-        },
-        ai_recommendation:
-          lang === 'bn'
-            ? 'উভয় পক্ষের রেকর্ড অনুযায়ী ৪% সামঞ্জস্যপূর্ণ রিবেট প্রদানের সুপারিশ করা হচ্ছে। কোনো পক্ষকেই এককভাবে দায়ী করা হয়নি।'
-            : 'Evidence suggests minor transit moisture. Recommended fair compromise: 4% rebate instead of 12%. Neither party declared at full fault.',
-      });
+    } catch (err) {
+      if (err.status === 404) {
+        setEvidenceError(lang === 'bn' ? 'এখনো কোনো ডেলিভারি রেকর্ড করা হয়নি (no delivery recorded yet)' : 'no delivery recorded yet');
+      } else {
+        setEvidenceError(err.message || (lang === 'bn' ? 'এভিডেন্স লোড করা যায়নি' : 'Failed to load evidence report'));
+      }
     } finally {
       setEvidenceLoading(false);
     }
@@ -138,17 +93,22 @@ export default function OrdersScreen() {
         <ActivityIndicator size="large" color={COLORS.cyan} style={{ marginVertical: 30 }} />
       ) : (
         orders.map((order) => {
-          const qty = order.total_kg ?? order.quantity_kg ?? order.quantity ?? (order.allocations ? order.allocations.reduce((sum, a) => sum + (a.allocated_kg || 0), 0) : 500);
-          const price = order.agreed_price ?? order.agreed_price_bdt ?? order.price ?? 85;
-          const grade = order.agreed_grade ?? order.grade ?? 'A';
-          const formattedDate = order.created_at ? order.created_at.split('T')[0] : '2026-10-22';
+          const qty = order.total_kg ?? (order.allocations ? order.allocations.reduce((sum, a) => sum + (a.allocated_kg || 0), 0) : 0);
+          const price = order.agreed_price ?? 0;
+          const grade = order.grade ?? (order.allocations?.[0]?.grade) ?? '—';
+          const formattedDate = order.created_at ? order.created_at.split('T')[0] : '—';
 
           return (
-            <Card key={order.id} glow={order.status === 'disputed'}>
+            <Card key={order.id} glow={order.status === 'disputed' || order.dispute_status === 'open_for_review'}>
               <View style={styles.orderTop}>
                 <View style={{ flex: 1, marginRight: 8 }}>
                   <Text style={styles.orderIdText} numberOfLines={1}>{t.orderId} {order.id}</Text>
-                  <Text style={styles.buyerNameText} numberOfLines={1}>{order.buyer_name || 'Shwapno / Wholesale'}</Text>
+                  <Text style={styles.buyerNameText} numberOfLines={1}>Buyer: {order.buyer_id || 'Direct Wholesale'}</Text>
+                  {order.allocations && order.allocations.length > 0 && (
+                    <Text style={{ fontSize: 11, color: COLORS.textMuted }}>
+                      {order.allocations.length} {lang === 'bn' ? 'কৃষকের বরাদ্দ' : 'farmer allocation(s)'}
+                    </Text>
+                  )}
                 </View>
                 {getStatusBadge(order.status)}
               </View>
@@ -156,7 +116,7 @@ export default function OrdersScreen() {
               <View style={styles.orderSpecsRow}>
                 <View style={styles.specBox}>
                   <Text style={styles.specLabel}>{t.crop}</Text>
-                  <Text style={styles.specVal}>{(order.crop || 'tomato').toUpperCase()}</Text>
+                  <Text style={styles.specVal}>{(order.crop || 'crop').toUpperCase()}</Text>
                 </View>
                 <View style={styles.specBox}>
                   <Text style={styles.specLabel}>{t.quantity}</Text>
@@ -202,9 +162,16 @@ export default function OrdersScreen() {
               </TouchableOpacity>
             </View>
 
-            {evidenceLoading || !selectedEvidence ? (
+            {evidenceLoading ? (
               <ActivityIndicator size="large" color={COLORS.cyan} style={{ padding: 40 }} />
-            ) : (
+            ) : evidenceError ? (
+              <View style={{ padding: 24, alignItems: 'center' }}>
+                <Ionicons name="alert-circle-outline" size={40} color={COLORS.warningOrange} />
+                <Text style={{ color: COLORS.textPrimary, fontSize: 14, textAlign: 'center', marginTop: 12 }}>
+                  {evidenceError}
+                </Text>
+              </View>
+            ) : selectedEvidence ? (
               <ScrollView>
                 <Text style={styles.evSub}>
                   {lang === 'bn'
@@ -214,42 +181,79 @@ export default function OrdersScreen() {
 
                 {/* Side-by-Side comparison cards */}
                 <View style={styles.compareRow}>
-                  {/* Farmer Record */}
+                  {/* Farmer Record (pre_sale) */}
                   <View style={styles.compareCol}>
-                    <Text style={styles.colTitle}>👨‍🌾 {lang === 'bn' ? 'কৃষকের রেকর্ড' : 'Farmer Record'}</Text>
+                    <Text style={styles.colTitle}>👨‍🌾 {lang === 'bn' ? 'পূর্ব-বিক্রয় রেকর্ড' : 'Pre-sale Record'}</Text>
                     <Text style={styles.evField}>
-                      {t.grade}: <Text style={{ color: COLORS.neonGreen, fontWeight: '700' }}>{selectedEvidence.pre_sale_evidence?.grade}</Text>
+                      {t.grade}: <Text style={{ color: COLORS.neonGreen, fontWeight: '700' }}>{selectedEvidence.pre_sale?.grade || '—'}</Text>
                     </Text>
                     <Text style={styles.evField}>
-                      {lang === 'bn' ? 'প্রস্তাবিত দর:' : 'Rate:'} ৳{selectedEvidence.pre_sale_evidence?.suggested_price}
+                      {t.quantity}: {selectedEvidence.pre_sale?.weight_kg ?? '—'} kg
                     </Text>
-                    <Badge label="Photo Verified" variant="green" style={{ marginTop: 8 }} />
+                    <Text style={styles.evField}>
+                      {lang === 'bn' ? 'দর:' : 'Price:'} ৳{selectedEvidence.pre_sale?.agreed_price ?? '—'}
+                    </Text>
+                    <Badge
+                      label={selectedEvidence.pre_sale?.photo_recorded ? 'Photo Verified' : 'No Photo'}
+                      variant={selectedEvidence.pre_sale?.photo_recorded ? 'green' : 'orange'}
+                      style={{ marginTop: 8 }}
+                    />
                   </View>
 
-                  {/* Buyer Report */}
+                  {/* Buyer Report (at_delivery) */}
                   <View style={styles.compareCol}>
-                    <Text style={styles.colTitle}>🏢 {lang === 'bn' ? 'বায়ারের দাবি' : 'Buyer Claim'}</Text>
+                    <Text style={styles.colTitle}>🏢 {lang === 'bn' ? 'ডেলিভারিতে পর্যবেক্ষণ' : 'At Delivery'}</Text>
                     <Text style={styles.evField}>
-                      {t.grade}: <Text style={{ color: COLORS.warningOrange, fontWeight: '700' }}>{selectedEvidence.delivery_observation?.buyer_reported_grade}</Text>
+                      {t.grade}: <Text style={{ color: COLORS.warningOrange, fontWeight: '700' }}>{selectedEvidence.at_delivery?.grade || '—'}</Text>
                     </Text>
                     <Text style={styles.evField}>
-                      {lang === 'bn' ? 'দাবীকৃত ছাড়:' : 'Deduction:'} {selectedEvidence.delivery_observation?.proposed_deduction_pct}%
+                      {t.quantity}: {selectedEvidence.at_delivery?.weight_kg ?? '—'} kg
                     </Text>
-                    <Text style={[styles.evField, { fontSize: 11, color: COLORS.textMuted, marginTop: 4 }]}>
-                      {selectedEvidence.delivery_observation?.reason}
+                    <Text style={styles.evField}>
+                      {lang === 'bn' ? 'দাবীকৃত ছাড়:' : 'Deduction:'} {selectedEvidence.at_delivery?.proposed_deduction_pct ?? 0}%
                     </Text>
+                    {selectedEvidence.at_delivery?.reason ? (
+                      <Text style={[styles.evField, { fontSize: 11, color: COLORS.textMuted, marginTop: 4 }]}>
+                        {selectedEvidence.at_delivery.reason}
+                      </Text>
+                    ) : null}
                   </View>
                 </View>
 
-                {/* AI Arbitrator Recommendation */}
-                <Card glow style={{ marginTop: 14 }}>
-                  <Text style={styles.aiRecTitle}>🤖 {lang === 'bn' ? 'নিরপেক্ষ AI পরামর্শ:' : 'Neutral AI Recommendation:'}</Text>
-                  <Text style={styles.aiRecText}>
-                    {selectedEvidence.ai_recommendation}
-                  </Text>
-                </Card>
+                {/* Discrepancies */}
+                {selectedEvidence.discrepancies && selectedEvidence.discrepancies.length > 0 && (
+                  <Card glow style={{ marginTop: 14 }}>
+                    <Text style={styles.aiRecTitle}>⚠️ {lang === 'bn' ? 'অসঙ্গতিসমূহ (Discrepancies):' : 'Discrepancies:'}</Text>
+                    {selectedEvidence.discrepancies.map((d, i) => (
+                      <Text key={i} style={[styles.aiRecText, { color: COLORS.warningOrange, marginBottom: 4 }]}>
+                        • {d}
+                      </Text>
+                    ))}
+                  </Card>
+                )}
+
+                {/* Notes */}
+                {selectedEvidence.notes && selectedEvidence.notes.length > 0 && (
+                  <Card style={{ marginTop: 10 }}>
+                    <Text style={styles.aiRecTitle}>📝 {lang === 'bn' ? 'পর্যবেক্ষণ নোট (Notes):' : 'Notes:'}</Text>
+                    {selectedEvidence.notes.map((n, i) => (
+                      <Text key={i} style={[styles.aiRecText, { marginBottom: 4 }]}>
+                        • {n}
+                      </Text>
+                    ))}
+                  </Card>
+                )}
+
+                {/* Neutral Statement */}
+                {selectedEvidence.statement ? (
+                  <Card style={{ marginTop: 10, backgroundColor: 'rgba(0, 242, 254, 0.05)' }}>
+                    <Text style={[styles.aiRecText, { fontStyle: 'italic', color: COLORS.cyan }]}>
+                      {selectedEvidence.statement}
+                    </Text>
+                  </Card>
+                ) : null}
               </ScrollView>
-            )}
+            ) : null}
           </View>
         </View>
       </Modal>

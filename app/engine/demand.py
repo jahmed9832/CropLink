@@ -11,10 +11,15 @@ MIN_WEEKS = 8
 
 
 def weekly_series(orders):
+    orders = [o for o in orders if not o.get("demo")]
+    current_yw = date.today().isocalendar()[:2]
     by = defaultdict(float)
     for o in orders:
         try:
             y, w, _ = date.fromisoformat(o["created_at"][:10]).isocalendar()
+            # Exclude current incomplete ISO week
+            if (y, w) >= current_yw:
+                continue
         except Exception:
             continue
         by[(y, w)] += float(o.get("total_kg", 0))
@@ -32,6 +37,7 @@ def weekly_series(orders):
 
 
 def predict(orders, alpha=0.5):
+    orders = [o for o in orders if not o.get("demo")]
     s = weekly_series(orders)
     if len(s) < MIN_WEEKS:
         return {"status": "insufficient_data", "weeks_of_history": len(s), "required_weeks": MIN_WEEKS,

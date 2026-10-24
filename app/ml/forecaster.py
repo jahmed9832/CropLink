@@ -15,7 +15,7 @@ from ..engine.constants import BASE_PRICE, CROPS, MARKETS
 
 HORIZONS = (7, 14)
 LAGS = (1, 3, 7, 14)
-MIN_HISTORY = 15
+MIN_HISTORY = 31
 PEAK_DOY = {"tomato": 20, "potato": 80, "onion": 300, "brinjal": 200, "chili": 330, "cabbage": 340, "rice": 120}
 MARKET_MULT = {"Dhaka": 1.08, "Chattogram": 1.04, "Rajshahi": 0.95, "Bogura": 0.93, "Khulna": 0.99}
 
@@ -100,7 +100,8 @@ def train(df=None, source=None):
         Xh, yh = np.array(X[h]), np.array(y[h])
         order = np.argsort(np.array(dates[h], dtype="datetime64[D]"))
         cut = int(len(order) * 0.85)
-        tr, te = order[:cut], order[cut:]
+        gap = 14
+        tr, te = order[:max(0, cut - gap)], order[cut:]
         m = HistGradientBoostingRegressor(max_iter=200, learning_rate=0.06, max_depth=5, random_state=0)
         m.fit(Xh[tr], yh[tr])
         pred = m.predict(Xh[te])
@@ -115,6 +116,13 @@ def train(df=None, source=None):
         models[h] = {"model": m, "q10": float(np.quantile(res, 0.10)), "q90": float(np.quantile(res, 0.90))}
         metrics["horizons"][str(h)] = {"mape_pct": round(mape, 2), "mape_naive_pct": round(mape_naive, 2),
                                        "mae_bdt": round(mae, 2), "n_test": int(len(te))}
+    import sklearn
+    metrics["versions"] = {
+        "scikit-learn": sklearn.__version__,
+        "numpy": np.__version__,
+        "pandas": pd.__version__,
+        "joblib": joblib.__version__
+    }
     # bundled latest history (fallback jodi DB-te price na thake)
     latest = {}
     for (crop, mk), g in df.groupby(["crop", "market"]):
@@ -136,6 +144,11 @@ class Forecaster:
             self.latest = json.load(fh)
         with open(os.path.join(settings.MODELS_DIR, "forecaster_metrics.json")) as fh:
             self.metrics = json.load(fh)
+
+        import sklearn
+        saved_sklearn = self.metrics.get("versions", {}).get("scikit-learn")
+        if saved_sklearn and saved_sklearn != sklearn.__version__:
+            raise RuntimeError(f"Forecaster scikit-learn version mismatch: model was trained on {saved_sklearn}, current is {sklearn.__version__}")
 
     def bundled_series(self, crop, market):
         return self.latest.get(f"{crop}|{market}")

@@ -7,10 +7,21 @@ from ..config import settings
 
 def ensure_models():
     need = ["forecaster.joblib", "latest_prices.json", "forecaster_metrics.json", "grader.joblib", "grader_metrics.json"]
-    if all(os.path.exists(os.path.join(settings.MODELS_DIR, n)) for n in need):
-        return False
-    main()
-    return True
+    if not all(os.path.exists(os.path.join(settings.MODELS_DIR, n)) for n in need):
+        main()
+        return True
+    import sklearn
+    for mfile in ("forecaster_metrics.json", "grader_metrics.json"):
+        try:
+            with open(os.path.join(settings.MODELS_DIR, mfile)) as fh:
+                data = json.load(fh)
+                if data.get("versions", {}).get("scikit-learn") != sklearn.__version__:
+                    main()
+                    return True
+        except Exception:
+            main()
+            return True
+    return False
 
 
 def main():

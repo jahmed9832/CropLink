@@ -172,6 +172,18 @@ class AgriSphereApi {
     if (data.token) {
       this.token = data.token;
       await AsyncStorage.setItem(TOKEN_KEY, data.token);
+      try {
+        const me = await this.request('/auth/me');
+        if (me && me.profile) {
+          data.profile = me.profile;
+        }
+        if (me && me.user_id) {
+          data.user_id = me.user_id;
+        }
+        if (me && me.role) {
+          data.role = me.role;
+        }
+      } catch (_) {}
       await AsyncStorage.setItem(USER_KEY, JSON.stringify(data));
     }
     return data;
